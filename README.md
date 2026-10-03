@@ -15,7 +15,8 @@ Watchface für die Amazfit Active 2 (Square), 390×450. Gebaut wird per GitHub A
 Jeder Push auf `main` baut neu und aktualisiert die Seite.
 
 ## Rand / Skalierung
-Die Originalgrafiken liegen in `design/original-assets/`. `tools/inset_layout.py` verkleinert sie
-(aktuell `SCALE = 0.86`) und setzt sie mittig nach `pokemon-watchface/assets/default.s/`, damit die
+Die Originalgrafiken liegen in `design/original-assets/`. `tools/inset_layout.py` baut daraus die
+Assets in `pokemon-watchface/assets/default.s/`: Uhrzeit-Ziffern vergrößert (`TIME_ZOOM`), Wochentage
+in fetter Pixelschrift neu gezeichnet, alles um `SCALE = 0.9` verkleinert und mittig gesetzt, damit die
 runden Display-Ecken nichts abschneiden. Bei Änderung von `SCALE` denselben Wert in
 `pokemon-watchface/watchface/index.js` eintragen und das Skript erneut ausführen.

@@ -3,8 +3,9 @@ import ui from '@zos/ui'
 const N = ui.show_level.ONLY_NORMAL
 
 // Design (390x450) verkleinert und mittig, damit die runden Ecken nichts abschneiden.
-// SCALE muss zu tools/inset_layout.py passen (die Assets sind bereits verkleinert).
-const SCALE = 0.86
+// SCALE muss zu tools/inset_layout.py passen (die Assets sind bereits verkleinert,
+// die Uhrzeit-Ziffern dort zusätzlich auf 48x36 vergrößert).
+const SCALE = 0.9
 const OX = Math.floor((390 - Math.round(390 * SCALE)) / 2)
 const OY = Math.floor((450 - Math.round(450 * SCALE)) / 2)
 const X = (x) => OX + Math.round(x * SCALE)
@@ -21,9 +22,9 @@ WatchFace({
   build() {
     ui.createWidget(ui.widget.IMG, { x: 0, y: 0, src: 'bg.png', show_level: N })
 
-    // Uhrzeit oben links (24h)
+    // Uhrzeit oben links (24h), größer als im Original (48x36 statt 40x30)
     ui.createWidget(ui.widget.IMG_TIME, {
-      hour_zero: 1, hour_startX: X(30), hour_startY: Y(4), hour_array: TIME, hour_space: 0,
+      hour_zero: 1, hour_startX: X(20), hour_startY: Y(1), hour_array: TIME, hour_space: 0,
       hour_unit_en: 'time/colon.png', hour_unit_sc: 'time/colon.png', hour_unit_tc: 'time/colon.png',
       hour_align: ui.align.LEFT,
       minute_zero: 1, minute_follow: 1, minute_array: TIME, minute_space: 0,
@@ -35,15 +36,16 @@ WatchFace({
       x: X(158), y: Y(250), week_en: WEEK, week_sc: WEEK, week_tc: WEEK, show_level: N,
     })
 
-    // Datum TT.MM unter der HP-Leiste
+    // Datum TT.MM unter der HP-Leiste; Punkt als eigenes Bild mit festem Abstand
+    // (als day_unit landete er auf der Uhr in der Monatszahl)
     ui.createWidget(ui.widget.IMG_DATE, {
       day_startX: X(232), day_startY: Y(298), day_zero: 1, day_space: 0, day_align: ui.align.LEFT,
       day_en_array: DATE, day_sc_array: DATE, day_tc_array: DATE,
-      day_unit_en: 'date/dot.png', day_unit_sc: 'date/dot.png', day_unit_tc: 'date/dot.png',
       show_level: N,
     })
+    ui.createWidget(ui.widget.IMG, { x: X(282), y: Y(298), src: 'date/dot.png', show_level: N })
     ui.createWidget(ui.widget.IMG_DATE, {
-      month_startX: X(289), month_startY: Y(298), month_zero: 1, month_space: 0, month_align: ui.align.LEFT,
+      month_startX: X(290), month_startY: Y(298), month_zero: 1, month_space: 0, month_align: ui.align.LEFT,
       month_en_array: DATE, month_sc_array: DATE, month_tc_array: DATE,
       show_level: N,
     })
