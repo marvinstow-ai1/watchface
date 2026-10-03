@@ -13,3 +13,9 @@ Watchface für die Amazfit Active 2 (Square), 390×450. Gebaut wird per GitHub A
 4. Auf der Uhr lange aufs Zifferblatt drücken → **Pokemon Battle** wählen
 
 Jeder Push auf `main` baut neu und aktualisiert die Seite.
+
+## Rand / Skalierung
+Die Originalgrafiken liegen in `design/original-assets/`. `tools/inset_layout.py` verkleinert sie
+(aktuell `SCALE = 0.86`) und setzt sie mittig nach `pokemon-watchface/assets/default.s/`, damit die
+runden Display-Ecken nichts abschneiden. Bei Änderung von `SCALE` denselben Wert in
+`pokemon-watchface/watchface/index.js` eintragen und das Skript erneut ausführen.
