@@ -1,0 +1,96 @@
+name: Build watchface
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "claude/**"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          npm install -g @zeppos/zeus-cli
+          pip install qrcode pillow
+          zeus --version
+
+      - name: zeus build
+        working-directory: pokemon-watchface
+        env:
+          CI: "true"
+        run: |
+          timeout 600 zeus build < /dev/null
+          ls -la dist
+
+      # Projekt-Pages-URL: https://<owner>.github.io/<repo>
+      - name: Make install files + QR codes
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="${{ github.event.repository.name }}"
+          BASE_URL="https://${OWNER}.github.io/${REPO}"
+          ZAB=$(ls pokemon-watchface/dist/*.zab | head -1)
+          python3 tools/make_install.py "$ZAB" "$BASE_URL" site
+          cp "$ZAB" site/
+          ls -la site
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watchface-build
+          path: |
+            pokemon-watchface/dist
+            site
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Check files are reachable (HTTP 200)
+        run: |
+          BASE="${{ steps.deploy.outputs.page_url }}"
+          BASE="${BASE%/}"
+          sleep 20
+          for f in index.html $(curl -fsS "$BASE/index.html" | grep -oE "watchface://[^<]+|zpkd1://[^<]+" | sed -E 's#^.*/##' | sort -u); do
+            stem="${f%.*}"
+            for ext in json bin zpk; do
+              [ "$f" = "index.html" ] && continue
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/$stem.$ext")
+              echo "$code $BASE/$stem.$ext"
+            done
+          done
+          curl -s -o /dev/null -w '%{http_code} index.html\n' "$BASE/index.html"
