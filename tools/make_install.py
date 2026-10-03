@@ -102,7 +102,8 @@ def main():
             for p in zpk_info.get("platforms", [])
         )
         devices = sorted({device_names.get(int(s), str(s)) for s in sources})
-        is_target = any(TARGET_NAME.lower() in d.lower() for d in devices)
+        norm = lambda t: " ".join("".join(c if c.isalnum() else " " for c in t.lower()).split())
+        is_target = any(norm(TARGET_NAME) in norm(d) for d in devices)  # "Active 2 (Square)"
         meta = {
             "appid": app["app"]["appId"],
             "name": app["app"]["appName"],
