@@ -52,6 +52,7 @@ def load_device_names(path):
                 walk(v)
 
     walk(data)
+    print(f"Geräteliste: {len(names)} deviceSources bekannt")
     return names
 
 
@@ -91,13 +92,11 @@ def main():
         if preview:
             (out / f"{stem}.png").write_bytes(preview)
 
-        # deviceSources stehen in der app.json der device.zip (targets.*.platforms)
-        sources = [
-            p["deviceSource"]
-            for t in app.get("targets", {}).values()
-            for p in t.get("platforms", [])
-            if "deviceSource" in p
-        ]
+        # deviceSources stehen in der app.json der device.zip (platforms bzw. targets.*.platforms)
+        platforms = list(app.get("platforms", []))
+        for t in app.get("targets", {}).values():
+            platforms += t.get("platforms", [])
+        sources = [p["deviceSource"] for p in platforms if "deviceSource" in p]
         screen = ", ".join(
             f"{p.get('screenType', '?')} {p.get('screenResolution', '?')} {p.get('cpuPlatform', '?')}"
             for p in zpk_info.get("platforms", [])
