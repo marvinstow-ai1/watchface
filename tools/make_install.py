@@ -129,8 +129,8 @@ def main():
     rows = "".join(
         ("<hr>" if other else f"<h2 style='color:#c00'>&#9733; {TARGET_NAME}: diese QR-Codes nehmen</h2>")
         + f"<h3>{', '.join(devs)}</h3><p>{scr} &middot; Paket {s}</p>"
-        f"<p><b>A (zuerst probieren)</b><br><img src='{s}_qr_watchface.png' width=300><br><code>{a}</code></p>"
-        f"<p><b>B (Fallback)</b><br><img src='{s}_qr_zpkd1.png' width=300><br><code>{b}</code></p>"
+        f"<p><b>B (zpkd1, auf der Active 2 Square getestet)</b><br><img src='{s}_qr_zpkd1.png' width=300><br><code>{b}</code></p>"
+        f"<p><b>A (watchface, Alternative)</b><br><img src='{s}_qr_watchface.png' width=300><br><code>{a}</code></p>"
         + ("" if other else "<hr><h2>Andere Geräte</h2>")
         for other, s, scr, devs, a, b in links
     )

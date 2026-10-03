@@ -8,9 +8,9 @@ Watchface für die Amazfit Active 2 (Square), 390×450. Gebaut wird per GitHub A
 ## Installieren
 1. Zepp-App → Profil → Active 2 Square → ganz unten **Entwicklermodus**
    (falls nicht sichtbar: Profil → Einstellungen → Über → 7× aufs Logo tippen)
-2. Oben rechts **Scannen** → auf der Seite den markierten **QR A** (Active 2 Square) scannen → Installation bestätigen
-3. Klappt A nicht: **QR B** probieren
-4. Auf der Uhr lange aufs Zifferblatt drücken → **Pokemon Battle** wählen
+2. Oben rechts **Scannen** → auf der Seite im markierten Abschnitt (Active 2 Square) **QR B** scannen → Installation bestätigen
+   (QR B / `zpkd1://` ist auf der Active 2 Square getestet; QR A ist nur eine Alternative)
+3. Auf der Uhr lange aufs Zifferblatt drücken → **Pokemon Battle** wählen
 
 Jeder Push auf `main` baut neu und aktualisiert die Seite.
 
