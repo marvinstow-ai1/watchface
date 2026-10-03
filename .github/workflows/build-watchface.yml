@@ -42,24 +42,6 @@ jobs:
           timeout 600 zeus build < /dev/null
           ls -la dist
 
-      - name: Show build manifest
-        run: |
-          ZAB=$(ls pokemon-watchface/dist/*.zab | head -1)
-          python3 - "$ZAB" <<'EOF'
-          import io, json, sys, zipfile
-          zab = zipfile.ZipFile(sys.argv[1])
-          print(zab.namelist())
-          print(zab.read("manifest.json").decode())
-          for n in zab.namelist():
-              if n.endswith(".zpk"):
-                  zpk = zipfile.ZipFile(io.BytesIO(zab.read(n)))
-                  print("==", n, zpk.namelist())
-                  dev = zipfile.ZipFile(io.BytesIO(zpk.read("device.zip")))
-                  print("   device.zip:", [x for x in dev.namelist() if not x.startswith("assets/")][:20])
-                  app = json.loads(dev.read("app.json"))
-                  print("   app.json:", json.dumps(app.get("targets") or app.get("platforms") or app)[:1500])
-          EOF
-
       # Projekt-Pages-URL: https://<owner>.github.io/<repo>
       - name: Make install files + QR codes
         run: |
@@ -67,7 +49,9 @@ jobs:
           REPO="${{ github.event.repository.name }}"
           BASE_URL="https://${OWNER}.github.io/${REPO}"
           ZAB=$(ls pokemon-watchface/dist/*.zab | head -1)
-          python3 tools/make_install.py "$ZAB" "$BASE_URL" site
+          # Zeus-Geräteliste, damit die Seite Gerätenamen statt IDs zeigt
+          curl -fsSL https://upload-cdn.zepp.com/zeppos/devkit/zeus/v1/devices.json -o devices.json || echo "{}" > devices.json
+          python3 tools/make_install.py "$ZAB" "$BASE_URL" site devices.json
           cp "$ZAB" site/
           ls -la site
 
