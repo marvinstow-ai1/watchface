@@ -4,8 +4,8 @@ const N = ui.show_level.ONLY_NORMAL
 
 // Design (390x450) verkleinert und mittig, damit die runden Ecken nichts abschneiden.
 // SCALE muss zu tools/inset_layout.py passen (die Assets sind bereits verkleinert,
-// die Uhrzeit-Ziffern dort zusätzlich auf 48x36 vergrößert).
-const SCALE = 0.9
+// die Uhrzeit-Ziffern dort zusätzlich auf 48x36 vergrößert). Wird vom Skript gesetzt.
+const SCALE = 0.86
 const OX = Math.floor((390 - Math.round(390 * SCALE)) / 2)
 const OY = Math.floor((450 - Math.round(450 * SCALE)) / 2)
 const X = (x) => OX + Math.round(x * SCALE)
@@ -31,9 +31,9 @@ WatchFace({
       show_level: N,
     })
 
-    // Wochentag (deutsch) über der unteren HP-Leiste
+    // Wochentag (deutsch) über der unteren HP-Leiste, rechtsbündig mit dem Ende der HP-Leiste (x=368)
     ui.createWidget(ui.widget.IMG_WEEK, {
-      x: X(158), y: Y(250), week_en: WEEK, week_sc: WEEK, week_tc: WEEK, show_level: N,
+      x: X(369 - 222), y: Y(250), week_en: WEEK, week_sc: WEEK, week_tc: WEEK, show_level: N,
     })
 
     // Datum TT.MM unter der HP-Leiste; Punkt als eigenes Bild mit festem Abstand
@@ -50,19 +50,21 @@ WatchFace({
       show_level: N,
     })
 
-    // Schritte unten links
-    ui.createWidget(ui.widget.IMG, { x: X(12), y: Y(366), src: 'shoe.png', show_level: N })
+    // Box unten links (innen x 12-161, y 351-437): Symbol + Zahl, zwei gleichmäßig verteilte Zeilen.
+    // Symbole sind so groß wie eine Ziffer (24x18), Ziffern 23px breit -> 5-stellige Schritte passen.
+    // Schritte
+    ui.createWidget(ui.widget.IMG, { x: X(17), y: Y(368), src: 'shoe.png', show_level: N })
     ui.createWidget(ui.widget.TEXT_IMG, {
-      x: X(36), y: Y(365), w: L(122), h: L(18), font_array: SMALL, h_space: 0,
+      x: X(45), y: Y(368), w: L(115), h: L(18), font_array: SMALL, h_space: 0,
       align_h: ui.align.LEFT, type: ui.data_type.STEP, show_level: N,
     })
 
-    // Akku unten links
+    // Akku
     ui.createWidget(ui.widget.IMG_LEVEL, {
-      x: X(14), y: Y(408), image_array: BATT, image_length: 6, type: ui.data_type.BATTERY, show_level: N,
+      x: X(17), y: Y(403), image_array: BATT, image_length: 6, type: ui.data_type.BATTERY, show_level: N,
     })
     ui.createWidget(ui.widget.TEXT_IMG, {
-      x: X(36), y: Y(405), w: L(120), h: L(18), font_array: SMALL, h_space: 0,
+      x: X(45), y: Y(403), w: L(115), h: L(18), font_array: SMALL, h_space: 0,
       unit_en: 'small/pct.png', unit_sc: 'small/pct.png', unit_tc: 'small/pct.png',
       align_h: ui.align.LEFT, type: ui.data_type.BATTERY, show_level: N,
     })

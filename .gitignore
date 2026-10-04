@@ -2,3 +2,5 @@ site/
 pokemon-watchface/dist/
 node_modules/
 __pycache__/
+build/
+zabs/

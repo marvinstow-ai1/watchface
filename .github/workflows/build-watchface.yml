@@ -34,13 +34,11 @@ jobs:
           pip install qrcode pillow
           zeus --version
 
-      - name: zeus build
-        working-directory: pokemon-watchface
+      # Varianten in verschiedenen Größen (SCALE in %), jede als eigenes Watchface
+      - name: zeus build (Varianten)
         env:
           CI: "true"
-        run: |
-          timeout 600 zeus build < /dev/null
-          ls -la dist
+        run: tools/build_variants.sh zabs 86 84 82
 
       # Projekt-Pages-URL: https://<owner>.github.io/<repo>
       - name: Make install files + QR codes
@@ -48,18 +46,17 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO="${{ github.event.repository.name }}"
           BASE_URL="https://${OWNER}.github.io/${REPO}"
-          ZAB=$(ls pokemon-watchface/dist/*.zab | head -1)
           # Zeus-Geräteliste, damit die Seite Gerätenamen statt IDs zeigt
           curl -fsSL https://upload-cdn.zepp.com/zeppos/devkit/zeus/v1/devices.json -o devices.json || echo "{}" > devices.json
-          python3 tools/make_install.py "$ZAB" "$BASE_URL" site devices.json
-          cp "$ZAB" site/
+          python3 tools/make_install.py "$BASE_URL" site devices.json zabs/pokemon-battle-86.zab zabs/pokemon-battle-84.zab zabs/pokemon-battle-82.zab
+          cp zabs/*.zab site/
           ls -la site
 
       - uses: actions/upload-artifact@v4
         with:
           name: watchface-build
           path: |
-            pokemon-watchface/dist
+            zabs
             site
 
       - uses: actions/upload-pages-artifact@v3

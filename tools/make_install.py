@@ -8,10 +8,11 @@ Vorgehen nach dem Muster von ZMake (melianmiko/zmake, zmake/zab_patch.py):
                 JSON zeigt auf die .bin (= device.zip aus der .zpk)
   - Fallback:   QR = zpkd1://<host>/<pfad>/<name>.zpk  (direkte .zpk)
 
-Nutzung: python3 tools/make_install.py <pfad/zur.zab> <https-basis-url> <ausgabeordner> [devices.json]
+Nutzung: python3 tools/make_install.py <https-basis-url> <ausgabeordner> <devices.json> <zab> [<zab> ...]
 
-Optional: devices.json von Zepp (Zeus-Geräteliste), um deviceSource-IDs Gerätenamen
-zuzuordnen. Das Paket, das die Ziel-Uhr (TARGET_NAME) enthält, steht oben.
+devices.json (Zeus-Geräteliste von Zepp) ordnet deviceSource-IDs Gerätenamen zu; fehlt sie,
+leere Datei oder "{}" übergeben. Pro .zab (Variante) zeigt die Seite das Paket der Ziel-Uhr
+(TARGET_NAME) oben, die Pakete für andere Uhren eingeklappt.
 """
 import json
 import sys
@@ -61,13 +62,12 @@ def qr(data: str, path: Path):
     img.save(path)
 
 
-def main():
-    zab_path, base_url, out = Path(sys.argv[1]), sys.argv[2].rstrip("/"), Path(sys.argv[3])
-    device_names = load_device_names(sys.argv[4] if len(sys.argv) > 4 else None)
-    out.mkdir(parents=True, exist_ok=True)
+def process_zab(zab_path, base_url, out, device_names):
+    """Entpackt eine .zab nach out/ und liefert (appName, [(is_target, stem, screen, devices, A, B)])."""
     zab = ZipFile(zab_path)
     manifest = json.loads(zab.read("manifest.json"))
     links = []
+    app_name = None
 
     for zpk_info in manifest["zpks"]:
         name = zpk_info["name"]                       # z.B. xyz.zpk
@@ -91,6 +91,7 @@ def main():
                     continue
         if preview:
             (out / f"{stem}.png").write_bytes(preview)
+        app_name = app["app"]["appName"]
 
         # deviceSources stehen in der app.json der device.zip (platforms bzw. targets.*.platforms)
         platforms = list(app.get("platforms", []))
@@ -106,7 +107,7 @@ def main():
         is_target = any(norm(TARGET_NAME) in norm(d) for d in devices)  # "Active 2 (Square)"
         meta = {
             "appid": app["app"]["appId"],
-            "name": app["app"]["appName"],
+            "name": app_name,
             "updated_at": round(time.time() / 1000),
             "url": f"{base_url}/{stem}.bin",
             "preview": f"{base_url}/{stem}.png",
@@ -118,27 +119,47 @@ def main():
         zpk_qr = base_url.replace("https:", "zpkd1:") + f"/{name}"
         qr(wf_qr, out / f"{stem}_qr_watchface.png")
         qr(zpk_qr, out / f"{stem}_qr_zpkd1.png")
-        links.append((not is_target, stem, screen, devices, wf_qr, zpk_qr))
-        print(f"{stem}: [{screen}] deviceSources={sources}\n  devices={devices}\n  A: {wf_qr}\n  B: {zpk_qr}")
+        links.append((is_target, stem, screen, devices, wf_qr, zpk_qr))
+        print(f"{app_name} {stem}: [{screen}] deviceSources={sources}\n  devices={devices}\n  A: {wf_qr}\n  B: {zpk_qr}")
 
-    links.sort()
-    if not any(not other for other, *_ in links):
-        print(f"WARNUNG: kein Paket mit '{TARGET_NAME}' gefunden (Geräteliste fehlt?)")
+    if not any(t for t, *_ in links):
+        print(f"WARNUNG: {app_name}: kein Paket mit '{TARGET_NAME}' gefunden (Geräteliste fehlt?)")
+    return app_name, links
 
-    # Kleine Übersichtsseite
-    rows = "".join(
-        ("<hr>" if other else f"<h2 style='color:#c00'>&#9733; {TARGET_NAME}: diese QR-Codes nehmen</h2>")
-        + f"<h3>{', '.join(devs)}</h3><p>{scr} &middot; Paket {s}</p>"
-        f"<p><b>B (zpkd1, auf der Active 2 Square getestet)</b><br><img src='{s}_qr_zpkd1.png' width=300><br><code>{b}</code></p>"
-        f"<p><b>A (watchface, Alternative)</b><br><img src='{s}_qr_watchface.png' width=300><br><code>{a}</code></p>"
-        + ("" if other else "<hr><h2>Andere Geräte</h2>")
-        for other, s, scr, devs, a, b in links
+
+def package_html(stem, screen, devices, a, b):
+    return (
+        f"<h3>{', '.join(devices)}</h3><p>{screen} &middot; Paket {stem}</p>"
+        f"<p><b>B (zpkd1, auf der Active 2 Square getestet)</b><br><img src='{stem}_qr_zpkd1.png' width=300><br><code>{b}</code></p>"
+        f"<p><b>A (watchface, Alternative)</b><br><img src='{stem}_qr_watchface.png' width=300><br><code>{a}</code></p>"
     )
+
+
+def main():
+    base_url, out = sys.argv[1].rstrip("/"), Path(sys.argv[2])
+    device_names = load_device_names(sys.argv[3])
+    out.mkdir(parents=True, exist_ok=True)
+
+    sections = []
+    for zab_path in sys.argv[4:]:
+        app_name, links = process_zab(Path(zab_path), base_url, out, device_names)
+        target = [l for l in links if l[0]]
+        others = [l for l in links if not l[0]]
+        html = f"<hr><h2>{app_name}</h2>"
+        html += "".join(
+            f"<p style='color:#c00'><b>&#9733; {TARGET_NAME}: diese QR-Codes nehmen</b></p>" + package_html(*l[1:])
+            for l in target
+        )
+        if others:
+            html += "<details><summary>Andere Uhren</summary>" + "".join(package_html(*l[1:]) for l in others) + "</details>"
+        sections.append(html)
+
     (out / "index.html").write_text(
         "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
         "<title>Watchface QR</title><body style='font-family:sans-serif;padding:16px'>"
         "<h1>Pokemon Battle – QR-Codes</h1>"
-        "<p>Zepp-App → Profil → Gerät → Entwicklermodus → Scannen</p>" + rows
+        "<p>Zepp-App → Profil → Gerät → Entwicklermodus → Scannen. Jede Variante ist ein eigenes "
+        "Watchface (Zahl = Größe in %), alle können gleichzeitig installiert sein.</p>" + "".join(sections)
     )
 
 

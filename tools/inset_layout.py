@@ -7,17 +7,20 @@ Baut die Watchface-Assets aus dem Original-Design (design/original-assets/, 390x
 - alles gleichmäßig um SCALE verkleinert und mittig gesetzt, damit an den abgerundeten
   Ecken der Active 2 Square nichts abgeschnitten wird
 
-Ergebnis: pokemon-watchface/assets/default.s/
-SCALE und TIME_ZOOM müssen mit pokemon-watchface/watchface/index.js übereinstimmen.
+- Schritt-/Akku-Symbole auf Ziffern-Zellgröße, kleine Ziffern 1px enger
 
-Nutzung: python3 tools/inset_layout.py
+Ergebnis: <projekt>/assets/default.s/; SCALE wird in <projekt>/watchface/index.js eingetragen.
+
+Nutzung: python3 tools/inset_layout.py [--scale 0.86] [--project pokemon-watchface]
 """
+import argparse
+import re
 import shutil
 from pathlib import Path
 
 from PIL import Image
 
-SCALE = 0.90
+SCALE = 0.86  # Standard; per --scale überschreibbar
 TIME_ZOOM = 6 / 5  # Uhrzeit-Pixel 5px -> 6px
 SCREEN = (390, 450)
 FILL = (248, 248, 248)  # Hintergrundfarbe des Designs
@@ -25,6 +28,7 @@ INK = (16, 16, 24, 255)  # Schriftfarbe des Designs
 
 WEEK_CELL = 3  # Pixelgröße der Wochentag-Schrift (Original-Koordinaten)
 WEEK_SIZE = (222, 21)  # Bildgröße wie im Original, Text rechtsbündig
+WEEK_MAX_WIDTH = 207  # links davon steht Gengar (bis x=155); rechter Rand = Ende der HP-Leiste
 WEEKDAYS = ["MONTAG", "DIENSTAG", "MITTWOCH", "DONNERSTAG", "FREITAG", "SAMSTAG", "SONNTAG"]
 
 # Fette 7-Zeilen-Pixelbuchstaben im Stil der Uhrzeit-Ziffern
@@ -47,17 +51,22 @@ GLYPHS = {
     "W": ["##...##", "##...##", "##...##", "##.#.##", "##.#.##", "###.###", "##...##"],
 }
 
+ICON_CELL = (24, 18)  # Symbole (Schuh, Akku) so groß wie eine Ziffer
+SMALL_PITCH = 23  # kleine Ziffern 24 -> 23px breit, damit 5-stellige Schritte in die Box passen
+
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "design" / "original-assets"
-DST = ROOT / "pokemon-watchface" / "assets" / "default.s"
 
 
 def render_word(word):
     glyphs = [GLYPHS[c] for c in word]
-    cols = sum(len(g[0]) for g in glyphs) + len(glyphs) - 1  # 1 Zelle Abstand
-    width = cols * WEEK_CELL
-    if width > WEEK_SIZE[0]:
-        raise SystemExit(f"{word} ist zu breit ({width}px > {WEEK_SIZE[0]}px)")
+    ink = sum(len(g[0]) for g in glyphs) * WEEK_CELL
+    gap = WEEK_CELL  # 1 Zelle Abstand; bei langen Wörtern (DONNERSTAG) etwas enger
+    if ink + (len(glyphs) - 1) * gap > WEEK_MAX_WIDTH:
+        gap = WEEK_CELL - 1
+    width = ink + (len(glyphs) - 1) * gap
+    if width > WEEK_MAX_WIDTH:
+        raise SystemExit(f"{word} ist zu breit ({width}px > {WEEK_MAX_WIDTH}px)")
     im = Image.new("RGBA", WEEK_SIZE, (0, 0, 0, 0))
     x0 = WEEK_SIZE[0] - width
     for g in glyphs:
@@ -66,7 +75,7 @@ def render_word(word):
                 if c == "#":
                     im.paste(INK, (x0 + x * WEEK_CELL, y * WEEK_CELL,
                                    x0 + (x + 1) * WEEK_CELL, (y + 1) * WEEK_CELL))
-        x0 += (len(g[0]) + 1) * WEEK_CELL
+        x0 += len(g[0]) * WEEK_CELL + gap
     return im
 
 
@@ -75,7 +84,24 @@ def scaled(im):
     return im.resize(size, Image.LANCZOS)
 
 
+def fit_icon(im):
+    """Symbol proportional auf Ziffern-Zellgröße bringen, zentriert in der Zelle."""
+    f = min(ICON_CELL[0] / im.width, ICON_CELL[1] / im.height)
+    icon = im.resize((round(im.width * f), round(im.height * f)), Image.LANCZOS)
+    cell = Image.new("RGBA", ICON_CELL, (0, 0, 0, 0))
+    cell.paste(icon, ((ICON_CELL[0] - icon.width) // 2, (ICON_CELL[1] - icon.height) // 2))
+    return cell
+
+
 def main():
+    global SCALE
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--scale", type=float, default=SCALE)
+    ap.add_argument("--project", type=Path, default=ROOT / "pokemon-watchface")
+    args = ap.parse_args()
+    SCALE = args.scale
+    DST = args.project / "assets" / "default.s"
+
     if DST.exists():
         shutil.rmtree(DST)
     DST.mkdir(parents=True)
@@ -99,11 +125,22 @@ def main():
             im = im.convert("RGBA")
             if rel.startswith("time/"):
                 im = im.resize((round(im.width * TIME_ZOOM), round(im.height * TIME_ZOOM)), Image.NEAREST)
+            elif rel == "shoe.png" or rel.startswith("batt/"):
+                im = fit_icon(im)
+            elif rel.startswith("small/"):
+                im = im.crop((0, 0, SMALL_PITCH, im.height))
             scaled(im).save(out)
 
     (DST / "week").mkdir(exist_ok=True)
     for i, day in enumerate(WEEKDAYS, start=1):
         scaled(render_word(day)).save(DST / "week" / f"{i}.png")
+
+    index_js = args.project / "watchface" / "index.js"
+    js = index_js.read_text()
+    js, n = re.subn(r"^const SCALE = [0-9.]+$", f"const SCALE = {SCALE}", js, flags=re.M)
+    if n != 1:
+        raise SystemExit(f"'const SCALE = ...' nicht in {index_js} gefunden")
+    index_js.write_text(js)
 
     w, h = round(SCREEN[0] * SCALE), round(SCREEN[1] * SCALE)
     print(f"SCALE={SCALE}: Design {w}x{h}, Rand links/rechts {(SCREEN[0] - w) // 2}px, "
