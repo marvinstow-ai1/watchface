@@ -11,19 +11,27 @@ Baut die Watchface-Assets aus dem Original-Design (design/original-assets/, 390x
 - alles gleichmäßig um SCALE verkleinert und mittig gesetzt, damit an den abgerundeten
   Ecken der Active 2 Square nichts abgeschnitten wird
 
+Battle-Modus (--battle battles/<name>/): Lugia und Gengar fallen aus dem Hintergrund, stattdessen
+laufen die Sprites aus battle.json (GIF/APNG/PNG) als Animation in den beiden Plätzen
+(alle Frames, Endlosschleife, fps aus den Frame-Dauern).
+
+--preview-out <ordner>: leerer Hintergrund (ohne Monster) + slots.json für die Web-App-Vorschau.
+
 Ergebnis: <projekt>/assets/default.s/; SCALE und die Layout-Werte werden in den
 generierten Block von <projekt>/watchface/index.js eingetragen.
 
 Nutzung: python3 tools/inset_layout.py [--scale 0.9] [--project pokemon-watchface]
 """
 import argparse
+import json
+import math
 import re
 import shutil
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps, ImageSequence
 
-SCALE = 0.9  # Standard; per --scale überschreibbar
+SCALE = 0.92  # Standard (Referenz: Kompakt 92); per --scale überschreibbar
 TIME_ZOOM = 6 / 5  # Uhrzeit-Pixel 5px -> 6px (Ziffern 48x36)
 SEC_ZOOM = 3 / 5  # Sekunden-Pixel 5px -> 3px (Ziffern 24x18)
 
@@ -39,6 +47,15 @@ PIECES = [  # (Ausschnitt im Original, Verschiebung)
     ((15, 33, 219, 81), BOX_DY),  # Gegner-HP-Box
     ((229, 0, 375, 142), LUGIA_DY),  # Lugia
 ]
+GENGAR_AREA = (40, 226, 172, 339)  # im Original; wird im Battle-Modus geleert
+
+# Plätze für die Monster im kompakten Design (x0, y0, x1, y1). Sprites werden ganzzahlig
+# (pixelgenau) so groß wie möglich eingepasst, unten bündig und waagerecht zentriert.
+SLOTS = {
+    "top": (224, 22, 382, 164),  # Gegner (Frontansicht), wo Lugia war
+    "bottom": (40, 88, 172, 262),  # eigenes Monster (Rückansicht), wo Gengar war
+}
+MAX_FPS = 30
 SCREEN = (390, 450)
 FILL = (248, 248, 248)  # Hintergrundfarbe des Designs
 INK = (16, 16, 24, 255)  # Schriftfarbe des Designs
@@ -110,10 +127,16 @@ def fit_icon(im):
     return cell
 
 
-def compose_bg(src):
-    """Original-Hintergrund in Bausteine zerlegen und kompakt neu zusammensetzen."""
+def compose_bg(src, monsters=True):
+    """Original-Hintergrund in Bausteine zerlegen und kompakt neu zusammensetzen.
+    monsters=False: ohne Lugia und Gengar (Plätze für animierte Sprites)."""
+    if not monsters:
+        src = src.copy()
+        src.paste(FILL, GENGAR_AREA)
     design = Image.new("RGB", (SCREEN[0], DESIGN_H), FILL)
     for (x0, y0, x1, y1), dy in PIECES:
+        if not monsters and dy == LUGIA_DY:
+            continue
         piece = src.crop((x0, y0, x1, y1))
         # nur Nicht-Hintergrund-Pixel übernehmen, damit sich Bausteine nicht überdecken
         mask = Image.new("L", piece.size, 0)
@@ -126,30 +149,117 @@ def compose_bg(src):
     return design
 
 
-def write_layout_block(index_js):
-    js = index_js.read_text()
-    block = (
-        "// <generated: tools/inset_layout.py>\n"
-        f"const SCALE = {SCALE}\n"
-        f"const DESIGN_H = {DESIGN_H}\n"
-        f"const BOTTOM_DY = {BOTTOM_DY}\n"
-        "// </generated>"
-    )
-    js, n = re.subn(r"// <generated: tools/inset_layout.py>.*?// </generated>", block, js, flags=re.S)
-    if n != 1:
-        raise SystemExit(f"generierter Layout-Block nicht in {index_js} gefunden")
-    index_js.write_text(js)
+def screen_bg(monsters=True):
+    small = scaled(compose_bg(Image.open(SRC / "bg.png").convert("RGB"), monsters))
+    bg = Image.new("RGB", SCREEN, FILL)
+    bg.paste(small, ((SCREEN[0] - small.width) // 2, (SCREEN[1] - small.height) // 2))
+    return bg
 
 
-def main():
-    global SCALE
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--scale", type=float, default=SCALE)
-    ap.add_argument("--project", type=Path, default=ROOT / "pokemon-watchface")
-    args = ap.parse_args()
-    SCALE = args.scale
-    DST = args.project / "assets" / "default.s"
+def load_sprite(path, flip=False):
+    """Alle Frames eines GIF/APNG/PNG als RGBA (zusammengesetzt), auf gemeinsamen Inhalt
+    zugeschnitten; dazu die Bildrate aus den Frame-Dauern."""
+    im = Image.open(path)
+    frames, durations = [], []
+    for f in ImageSequence.Iterator(im):
+        frames.append(f.convert("RGBA"))
+        durations.append(f.info.get("duration") or 100)
+    boxes = [f.getchannel("A").getbbox() for f in frames]
+    boxes = [b for b in boxes if b]
+    if not boxes:
+        raise SystemExit(f"{path}: keine sichtbaren Pixel (Hintergrund nicht transparent?)")
+    box = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+           max(b[2] for b in boxes), max(b[3] for b in boxes))
+    frames = [f.crop(box) for f in frames]
+    if flip:
+        frames = [ImageOps.mirror(f) for f in frames]
+    fps = round(1000 * len(durations) / sum(durations))
+    return frames, max(1, min(MAX_FPS, fps))
 
+
+def fit_to_slot(frames, slot):
+    """Sprite in den Platz einpassen (ganzzahlig vergrößert, sonst verkleinert);
+    liefert Frames und Position in Design-Koordinaten."""
+    x0, y0, x1, y1 = slot
+    w, h = frames[0].size
+    f = min((x1 - x0) / w, (y1 - y0) / h)
+    if f >= 1:
+        f = math.floor(f)
+        frames = [fr.resize((w * f, h * f), Image.NEAREST) for fr in frames]
+    else:
+        frames = [fr.resize((round(w * f), round(h * f)), Image.LANCZOS) for fr in frames]
+    w, h = frames[0].size
+    return frames, (x0 + (x1 - x0 - w) // 2, y1 - h)
+
+
+def build_anims(battle_dir, dst):
+    cfg = json.loads((battle_dir / "battle.json").read_text())
+    anims = {}
+    (dst / "anim").mkdir(exist_ok=True)
+    for key in ("top", "bottom"):
+        frames, fps = load_sprite(battle_dir / cfg[key], cfg.get(f"flip_{key}", False))
+        frames, (x, y) = fit_to_slot(frames, SLOTS[key])
+        for i, fr in enumerate(frames):
+            scaled(fr).save(dst / "anim" / f"{key}_{i}.png")
+        anims[key] = {"x": x, "y": y, "fps": fps, "frames": len(frames)}
+        print(f"{cfg['name']} {key}: {cfg[key]} -> {len(frames)} Frames, {fps} fps, "
+              f"{frames[0].width}x{frames[0].height} bei ({x},{y})")
+    return cfg, anims
+
+
+def write_preview(out):
+    """Bildschirm ohne Monster, mit Beispiel-Uhrzeit/-Datum usw., plus Platz-Koordinaten
+    (Bildschirm-Pixel) für die Vorschau in der Web-App."""
+    import tempfile
+
+    out.mkdir(parents=True, exist_ok=True)
+    ox = (SCREEN[0] - round(SCREEN[0] * SCALE)) // 2
+    oy = (SCREEN[1] - round(DESIGN_H * SCALE)) // 2
+    X = lambda x: ox + round(x * SCALE)
+    Y = lambda y: oy + round(y * SCALE)
+    YB = lambda y: Y(y + BOTTOM_DY)
+    L = lambda v: round(v * SCALE)
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        generate_assets(d, monsters=False)
+        bg = Image.open(d / "bg.png").convert("RGBA")
+
+        def put(name, x, y):
+            im = Image.open(d / name).convert("RGBA")
+            bg.alpha_composite(im, (x, y))
+            return im.width
+
+        # gleiche Positionen wie in watchface/index.js
+        x = X(20)
+        for n in ["time/1.png", "time/2.png", "time/colon.png", "time/3.png", "time/4.png"]:
+            x += put(n, x, Y(0))
+        x = X(20) + 4 * L(48) + L(18) + L(4)
+        for n in ["sec/5.png", "sec/6.png"]:
+            x += put(n, x, Y(0))
+        put("week/1.png", X(369 - 222), YB(250))
+        x = X(232)
+        for n in ["date/0.png", "date/5.png"]:
+            x += put(n, x, YB(298))
+        put("date/dot.png", X(282), YB(298))
+        x = X(290)
+        for n in ["date/1.png", "date/0.png"]:
+            x += put(n, x, YB(298))
+        put("shoe.png", X(17), YB(368))
+        x = X(45)
+        for c in "4512":
+            x += put(f"small/{c}.png", x, YB(368))
+        put("batt/3.png", X(17), YB(403))
+        x = X(45)
+        for n in ["small/9.png", "small/3.png", "small/pct.png"]:
+            x += put(n, x, YB(403))
+        bg.convert("RGB").save(out / "bg.png")
+    slots = {k: [ox + round(x0 * SCALE), oy + round(y0 * SCALE), ox + round(x1 * SCALE), oy + round(y1 * SCALE)]
+             for k, (x0, y0, x1, y1) in SLOTS.items()}
+    (out / "slots.json").write_text(json.dumps({"scale": SCALE, "screen": SCREEN, "slots": slots}))
+
+
+def generate_assets(DST, monsters=True):
+    """Alle Assets (außer Monster-Animationen) für das kompakte Layout nach DST schreiben."""
     if DST.exists():
         shutil.rmtree(DST)
     DST.mkdir(parents=True)
@@ -163,10 +273,7 @@ def main():
         if rel == "icon.png":
             shutil.copy(src, out)  # Vorschaubild in der Zepp-App, bleibt wie es ist
         elif rel == "bg.png":
-            small = scaled(compose_bg(im.convert("RGB")))
-            bg = Image.new("RGB", SCREEN, FILL)
-            bg.paste(small, ((SCREEN[0] - small.width) // 2, (SCREEN[1] - small.height) // 2))
-            bg.save(out)
+            screen_bg(monsters).save(out)
         elif rel.startswith("week/"):
             continue  # wird unten neu gerendert
         else:
@@ -187,7 +294,43 @@ def main():
     for i, day in enumerate(WEEKDAYS, start=1):
         scaled(render_word(day)).save(DST / "week" / f"{i}.png")
 
-    write_layout_block(args.project / "watchface" / "index.js")
+
+def write_layout_block(index_js, anims=None):
+    js = index_js.read_text()
+    block = (
+        "// <generated: tools/inset_layout.py>\n"
+        f"const SCALE = {SCALE}\n"
+        f"const DESIGN_H = {DESIGN_H}\n"
+        f"const BOTTOM_DY = {BOTTOM_DY}\n"
+        f"const ANIM = {json.dumps(anims) if anims else 'null'}\n"
+        "// </generated>"
+    )
+    js, n = re.subn(r"// <generated: tools/inset_layout.py>.*?// </generated>", block, js, flags=re.S)
+    if n != 1:
+        raise SystemExit(f"generierter Layout-Block nicht in {index_js} gefunden")
+    index_js.write_text(js)
+
+
+def main():
+    global SCALE
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--scale", type=float, default=SCALE)
+    ap.add_argument("--project", type=Path, default=ROOT / "pokemon-watchface")
+    ap.add_argument("--battle", type=Path, help="Ordner mit battle.json + Sprites")
+    ap.add_argument("--preview-out", type=Path, help="nur Vorschau-Dateien für die Web-App schreiben")
+    args = ap.parse_args()
+    SCALE = args.scale
+    if args.preview_out:
+        write_preview(args.preview_out)
+        return
+    DST = args.project / "assets" / "default.s"
+
+    generate_assets(DST, monsters=not args.battle)
+
+    anims = None
+    if args.battle:
+        cfg, anims = build_anims(args.battle, DST)
+    write_layout_block(args.project / "watchface" / "index.js", anims)
 
     w, h = round(SCREEN[0] * SCALE), round(DESIGN_H * SCALE)
     print(f"SCALE={SCALE}: Design {w}x{h}, Rand links/rechts {(SCREEN[0] - w) // 2}px, "

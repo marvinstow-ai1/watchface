@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle-Builder</title>
+<style>
+  :root {
+    --bg: #f4f4f6; --card: #ffffff; --text: #1a1a22; --muted: #6b6b78; --line: #dcdce3;
+    --accent: #c62828; --ok: #2e7d32; --warn: #b26a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121216; --card: #1c1c22; --text: #ececf1; --muted: #9a9aa8; --line: #33333d;
+            --accent: #ef5350; --ok: #66bb6a; --warn: #ffb74d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 760px) { .grid { grid-template-columns: 1fr 1fr; } }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  label.inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 6px 0 0; }
+  input[type=text], input[type=password] { width: 100%; padding: 10px; border-radius: 8px;
+         border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 16px; }
+  input[type=file] { width: 100%; font-size: 15px; }
+  button { padding: 10px 16px; border-radius: 8px; border: 0; background: var(--accent); color: #fff;
+           font-size: 16px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .hint { color: var(--muted); font-size: .9rem; margin-top: 4px; }
+  .status { margin-top: 12px; font-size: .95rem; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--accent); } .status.warn { color: var(--warn); }
+  /* Vorschau: Bildschirm 390x450, wird auf die Kartenbreite skaliert */
+  .watch-wrap { display: flex; justify-content: center; }
+  .watch { position: relative; width: 390px; height: 450px; border-radius: 80px; overflow: hidden;
+           background: #f8f8f8 center/100% 100% no-repeat; border: 10px solid #222; box-sizing: content-box;
+           transform-origin: top center; }
+  .sprite { position: absolute; overflow: hidden; }
+  .sprite img { position: absolute; image-rendering: pixelated; image-rendering: crisp-edges; }
+  ul.battles { list-style: none; padding: 0; margin: 0; }
+  ul.battles li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                  padding: 8px 0; border-bottom: 1px solid var(--line); }
+  ul.battles li:last-child { border-bottom: 0; }
+  a { color: var(--accent); }
+  code { font-size: .9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Battle-Builder</h1>
+  <p class="lead">Zwei animierte Sprites hochladen, daraus wird ein eigenes Watchface im Layout „Kompakt 92“.
+    Nach dem Bauen (ca. 2–3 Min.) erscheint es mit QR-Code auf der <a href="../">Installationsseite</a>.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Neues Battle</h2>
+      <label for="name">Name (so heißt das Watchface auf der Uhr)</label>
+      <input id="name" type="text" placeholder="z. B. Gengar vs Turtok" maxlength="40">
+
+      <label for="top">Oben: Gegner (Frontansicht)</label>
+      <input id="top" type="file" accept=".gif,.png,.apng,.webp,image/gif,image/png,image/apng,image/webp">
+      <label class="inline"><input id="flipTop" type="checkbox"> spiegeln</label>
+
+      <label for="bottom">Unten: eigenes Monster (Rückansicht)</label>
+      <input id="bottom" type="file" accept=".gif,.png,.apng,.webp,image/gif,image/png,image/apng,image/webp">
+      <label class="inline"><input id="flipBottom" type="checkbox"> spiegeln</label>
+      <p class="hint">GIF oder animiertes PNG mit transparentem Hintergrund. Alle Frames werden übernommen
+        und laufen in Endlosschleife.</p>
+
+      <div class="row">
+        <button id="build" disabled>Bauen</button>
+      </div>
+      <div id="buildStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Vorschau</h2>
+      <div class="watch-wrap" id="watchWrap">
+        <div class="watch" id="watch">
+          <div class="sprite" id="spriteTop"><img alt=""></div>
+          <div class="sprite" id="spriteBottom"><img alt=""></div>
+        </div>
+      </div>
+      <p class="hint">Uhrzeit, Datum usw. sind Beispielwerte. Position und Größe der Monster
+        berechnet die Uhr genauso; bei Sprites mit stark wechselnder Größe kann es um ein paar Pixel abweichen.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Vorhandene Battles</h2>
+    <ul class="battles" id="battles"><li class="hint">Token eintragen, um die Liste zu laden.</li></ul>
+  </section>
+
+  <section class="card">
+    <h2>GitHub-Token</h2>
+    <p class="hint">Wird nur in diesem Browser gespeichert (localStorage) und nur an api.github.com gesendet.
+      Fine-grained Token, nur für dieses Repo, Rechte: <b>Contents: Read and write</b>, <b>Actions: Read</b>.</p>
+    <label for="token">Token</label>
+    <input id="token" type="password" autocomplete="off" placeholder="github_pat_…">
+    <div class="row">
+      <button id="saveToken" class="secondary">Speichern &amp; prüfen</button>
+      <button id="forgetToken" class="secondary">Vergessen</button>
+    </div>
+    <div id="tokenStatus" class="status"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  // Repo aus der Pages-URL ableiten: https://<owner>.github.io/<repo>/app/
+  const OWNER = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : 'marvinstow-ai1';
+  const REPO = location.hostname.endsWith('.github.io') ? location.pathname.split('/')[1] : 'watchface';
+  const BRANCH = 'main';
+  const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+  const $ = (id) => document.getElementById(id);
+
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+    del: (k) => { try { localStorage.removeItem(k); } catch {} },
+  };
+
+  // ---------- GitHub API ----------
+  async function gh(path, opts = {}) {
+    const token = store.get('gh_token');
+    if (!token) throw new Error('Kein Token gespeichert.');
+    const res = await fetch(path.startsWith('http') ? path : API + path, {
+      ...opts,
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
+                 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+    });
+    if (!res.ok) {
+      let msg = `${res.status}`;
+      try { msg += ' ' + ((await res.json()).message || ''); } catch {}
+      throw new Error(`GitHub: ${msg}`);
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  // ---------- Token ----------
+  function setStatus(el, text, cls = '') { el.textContent = text; el.className = 'status ' + cls; }
+  $('token').value = store.get('gh_token');
+  $('saveToken').onclick = async () => {
+    store.set('gh_token', $('token').value.trim());
+    setStatus($('tokenStatus'), 'Prüfe …');
+    try {
+      const repo = await gh('');
+      if (!repo.permissions || !repo.permissions.push) throw new Error('Token hat keine Schreibrechte auf das Repo.');
+      setStatus($('tokenStatus'), `OK: Schreibzugriff auf ${repo.full_name}.`, 'ok');
+      loadBattles();
+    } catch (e) { setStatus($('tokenStatus'), e.message, 'err'); }
+    updateButton();
+  };
+  $('forgetToken').onclick = () => { store.del('gh_token'); $('token').value = '';
+    setStatus($('tokenStatus'), 'Token entfernt.'); updateButton(); };
+
+  // ---------- Vorschau ----------
+  let layout = null;
+  fetch('slots.json').then((r) => r.json()).then((j) => { layout = j; refreshPreview(); });
+  $('watch').style.backgroundImage = 'url(bg.png)';
+  function fitWatch() {
+    const avail = $('watchWrap').clientWidth;
+    const s = Math.min(1, avail / 410);
+    $('watch').style.transform = `scale(${s})`;
+    $('watchWrap').style.height = `${470 * s}px`;
+  }
+  window.addEventListener('resize', fitWatch); fitWatch();
+
+  const files = { top: null, bottom: null };
+  const info = { top: null, bottom: null };
+
+  // Sichtbaren Bereich (Alpha-Bounding-Box) des ersten Frames bestimmen
+  function measure(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+          if (d[(y * c.width + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+        }
+        if (x1 < 0) { x0 = 0; y0 = 0; x1 = c.width - 1; y1 = c.height - 1; }
+        resolve({ w: img.naturalWidth, h: img.naturalHeight, box: [x0, y0, x1 + 1, y1 + 1] });
+      };
+      img.onerror = () => reject(new Error('Bild kann nicht gelesen werden.'));
+      img.src = url;
+    });
+  }
+
+  async function onFile(key) {
+    const f = $(key).files[0];
+    files[key] = f || null; info[key] = null;
+    if (f) {
+      const url = URL.createObjectURL(f);
+      info[key] = { url, ...(await measure(url)) };
+    }
+    refreshPreview(); updateButton();
+  }
+  $('top').onchange = () => onFile('top');
+  $('bottom').onchange = () => onFile('bottom');
+  $('flipTop').onchange = refreshPreview;
+  $('flipBottom').onchange = refreshPreview;
+
+  // gleiche Logik wie tools/inset_layout.py: ganzzahlig vergrößern, unten bündig, waagerecht zentriert
+  function place(key) {
+    const el = $(key === 'top' ? 'spriteTop' : 'spriteBottom');
+    const img = el.querySelector('img');
+    const i = info[key];
+    if (!i || !layout) { el.style.display = 'none'; return; }
+    const [sx0, sy0, sx1, sy1] = layout.slots[key];
+    const S = layout.scale;
+    const [bx0, by0, bx1, by1] = i.box;
+    const w = bx1 - bx0, h = by1 - by0;
+    let f = Math.min((sx1 - sx0) / S / w, (sy1 - sy0) / S / h);
+    if (f >= 1) f = Math.floor(f);
+    const k = f * S; // Bildschirm-Pixel pro Sprite-Pixel
+    const dw = w * k, dh = h * k;
+    const flip = $(key === 'top' ? 'flipTop' : 'flipBottom').checked;
+    el.style.display = 'block';
+    el.style.left = `${sx0 + (sx1 - sx0 - dw) / 2}px`;
+    el.style.top = `${sy1 - dh}px`;
+    el.style.width = `${dw}px`; el.style.height = `${dh}px`;
+    img.src = i.url;
+    img.style.width = `${i.w * k}px`; img.style.height = `${i.h * k}px`;
+    img.style.left = `${(flip ? -(i.w - bx1) : -bx0) * k}px`;
+    img.style.top = `${-by0 * k}px`;
+    img.style.transform = flip ? 'scaleX(-1)' : '';
+  }
+  function refreshPreview() { place('top'); place('bottom'); }
+
+  // ---------- Bauen ----------
+  function slugify(s) {
+    return s.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  }
+  function updateButton() {
+    $('build').disabled = !(store.get('gh_token') && files.top && files.bottom && slugify($('name').value));
+  }
+  $('name').oninput = updateButton;
+
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1]);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  const b64utf8 = (s) => btoa(unescape(encodeURIComponent(s)));
+  const ext = (f) => (f.name.match(/\.(gif|png|apng|webp)$/i) || ['', 'png'])[1].toLowerCase();
+
+  // Mehrere Dateien in einem einzigen Commit (ein Build)
+  async function commitFiles(entries, message, removePrefix) {
+    const ref = await gh(`/git/ref/heads/${BRANCH}`);
+    const head = ref.object.sha;
+    const commit = await gh(`/git/commits/${head}`);
+    let tree;
+    if (removePrefix) {
+      const full = await gh(`/git/trees/${commit.tree.sha}?recursive=1`);
+      if (full.truncated) throw new Error('Repo-Baum zu groß für Löschen.');
+      const kept = full.tree.filter((t) => t.type === 'blob' && !t.path.startsWith(removePrefix))
+        .map(({ path, mode, type, sha }) => ({ path, mode, type, sha }));
+      tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ tree: kept }) });
+    } else {
+      const items = [];
+      for (const e of entries) {
+        const blob = await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: e.content, encoding: 'base64' }) });
+        items.push({ path: e.path, mode: '100644', type: 'blob', sha: blob.sha });
+      }
+      tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: commit.tree.sha, tree: items }) });
+    }
+    const next = await gh('/git/commits', { method: 'POST',
+      body: JSON.stringify({ message, tree: tree.sha, parents: [head] }) });
+    await gh(`/git/refs/heads/${BRANCH}`, { method: 'PATCH', body: JSON.stringify({ sha: next.sha }) });
+    return next.sha;
+  }
+
+  async function watchBuild(sha, el) {
+    for (let i = 0; i < 90; i++) {
+      await new Promise((r) => setTimeout(r, 10000));
+      let run = null;
+      try { run = (await gh(`/actions/runs?head_sha=${sha}`)).workflow_runs[0]; } catch (e) {
+        setStatus(el, `Commit gespeichert. Build-Status nicht abrufbar (${e.message}). Seite in ein paar Minuten neu laden.`, 'warn');
+        return;
+      }
+      if (!run) { setStatus(el, 'Warte auf Build-Start …'); continue; }
+      if (run.status !== 'completed') { setStatus(el, `Build läuft … (${run.status})`); continue; }
+      if (run.conclusion === 'success') {
+        el.innerHTML = 'Fertig! <a href="../">Zur Installationsseite mit QR-Code</a> (ggf. neu laden).';
+        el.className = 'status ok';
+      } else {
+        el.innerHTML = `Build fehlgeschlagen (${run.conclusion}). <a href="${run.html_url}" target="_blank" rel="noopener">Log ansehen</a>`;
+        el.className = 'status err';
+      }
+      return;
+    }
+    setStatus(el, 'Build dauert ungewöhnlich lange – bitte später auf der Installationsseite nachsehen.', 'warn');
+  }
+
+  $('build').onclick = async () => {
+    const name = $('name').value.trim();
+    const slug = slugify(name);
+    const el = $('buildStatus');
+    $('build').disabled = true;
+    try {
+      setStatus(el, 'Lade Dateien hoch …');
+      const topName = `top.${ext(files.top)}`, bottomName = `bottom.${ext(files.bottom)}`;
+      const cfg = { name, top: topName, bottom: bottomName,
+        flip_top: $('flipTop').checked, flip_bottom: $('flipBottom').checked, created: new Date().toISOString() };
+      const sha = await commitFiles([
+        { path: `battles/${slug}/${topName}`, content: await toBase64(files.top) },
+        { path: `battles/${slug}/${bottomName}`, content: await toBase64(files.bottom) },
+        { path: `battles/${slug}/battle.json`, content: b64utf8(JSON.stringify(cfg, null, 2) + '\n') },
+      ], `Battle: ${name}`);
+      setStatus(el, 'Gespeichert, Build startet …');
+      loadBattles();
+      await watchBuild(sha, el);
+    } catch (e) { setStatus(el, e.message, 'err'); }
+    updateButton();
+  };
+
+  // ---------- Liste ----------
+  async function loadBattles() {
+    const ul = $('battles');
+    if (!store.get('gh_token')) return;
+    try {
+      let dirs = [];
+      try { dirs = (await gh(`/contents/battles?ref=${BRANCH}`)).filter((d) => d.type === 'dir'); }
+      catch (e) { if (!String(e.message).includes('404')) throw e; }
+      if (!dirs.length) { ul.innerHTML = '<li class="hint">Noch keine Battles.</li>'; return; }
+      ul.innerHTML = '';
+      for (const d of dirs) {
+        let name = d.name;
+        try {
+          const f = await gh(`/contents/battles/${d.name}/battle.json?ref=${BRANCH}`);
+          name = JSON.parse(decodeURIComponent(escape(atob(f.content.replace(/\n/g, ''))))).name || d.name;
+        } catch {}
+        const li = document.createElement('li');
+        const span = document.createElement('span'); span.textContent = name;
+        const del = document.createElement('button'); del.className = 'secondary'; del.textContent = 'Löschen';
+        del.onclick = async () => {
+          if (!confirm(`„${name}“ löschen? Es verschwindet von der Installationsseite (auf der Uhr bleibt es installiert).`)) return;
+          del.disabled = true;
+          try { await commitFiles([], `Battle löschen: ${name}`, `battles/${d.name}/`); li.remove(); }
+          catch (e) { alert(e.message); del.disabled = false; }
+        };
+        li.append(span, del); ul.append(li);
+      }
+    } catch (e) { ul.innerHTML = ''; const li = document.createElement('li'); li.className = 'hint';
+      li.textContent = e.message; ul.append(li); }
+  }
+  loadBattles(); updateButton();
+})();
+</script>
+</body>
+</html>

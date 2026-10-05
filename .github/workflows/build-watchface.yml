@@ -36,6 +36,12 @@ jobs:
           pip install qrcode pillow
           zeus --version
 
+      # Battles aus battles/<name>/battle.json (über die Web-App angelegt): animierte Monster
+      - name: zeus build (Battles)
+        env:
+          CI: "true"
+        run: tools/build_battles.sh zabs/battles
+
       # Kompaktes Layout in verschiedenen Größen (SCALE in %), jede als eigenes Watchface
       - name: zeus build (Kompakt)
         env:
@@ -62,9 +68,13 @@ jobs:
           # Zeus-Geräteliste, damit die Seite Gerätenamen statt IDs zeigt
           curl -fsSL https://upload-cdn.zepp.com/zeppos/devkit/zeus/v1/devices.json -o devices.json || echo "{}" > devices.json
           python3 tools/make_install.py "$BASE_URL" site devices.json \
+            $(cat zabs/battles/battles.txt) \
             zabs/pokemon-kompakt-92.zab zabs/pokemon-kompakt-90.zab zabs/pokemon-kompakt-88.zab \
             zabs/pokemon-battle-86.zab zabs/pokemon-battle-84.zab zabs/pokemon-battle-82.zab
           cp zabs/*.zab site/
+          # Web-App (Battle-Builder) mit Vorschau-Hintergrund und Platz-Koordinaten
+          python3 tools/inset_layout.py --preview-out site/app
+          cp webapp/index.html site/app/index.html
           ls -la site
 
       - uses: actions/upload-artifact@v4

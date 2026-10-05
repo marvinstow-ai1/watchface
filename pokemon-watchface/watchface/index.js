@@ -6,10 +6,12 @@ const N = ui.show_level.ONLY_NORMAL
 // mittig, damit die runden Ecken nichts abschneiden. Koordinaten unten sind Design-Koordinaten;
 // alles ab Gengar (Original-y >= 226) liegt um BOTTOM_DY höher als im Original.
 // Der Block wird von tools/inset_layout.py gesetzt (die Assets sind dort bereits verkleinert).
+// ANIM (nur Battle-Watchfaces): animierte Monster statt Lugia/Gengar, Frames in assets/anim/.
 // <generated: tools/inset_layout.py>
-const SCALE = 0.9
+const SCALE = 0.92
 const DESIGN_H = 378
 const BOTTOM_DY = -72
+const ANIM = null
 // </generated>
 const OX = Math.floor((390 - Math.round(390 * SCALE)) / 2)
 const OY = Math.floor((450 - Math.round(DESIGN_H * SCALE)) / 2)
@@ -28,6 +30,25 @@ const BATT = [0, 1, 2, 3, 4, 5].map((n) => `batt/${n}.png`)
 WatchFace({
   build() {
     ui.createWidget(ui.widget.IMG, { x: 0, y: 0, src: 'bg.png', show_level: N })
+
+    // Animierte Monster (Battle-Watchfaces): Endlosschleife, nur bei aktivem Display
+    const anims = []
+    for (const key of ['top', 'bottom']) {
+      const a = ANIM && ANIM[key]
+      if (!a) continue
+      anims.push(ui.createWidget(ui.widget.IMG_ANIM, {
+        x: X(a.x), y: Y(a.y), anim_path: 'anim', anim_prefix: key, anim_ext: 'png',
+        anim_fps: a.fps, anim_size: a.frames, repeat_count: 0, // 0 = Endlosschleife
+        anim_status: ui.anim_status.START, show_level: N,
+      }))
+    }
+    if (anims.length && ui.widget.WIDGET_DELEGATE) {
+      // nach dem Aufwecken des Displays wieder starten
+      ui.createWidget(ui.widget.WIDGET_DELEGATE, {
+        resume_call: () => anims.forEach((w) => w.setProperty(ui.prop.ANIM_STATUS, ui.anim_status.START)),
+        pause_call: () => anims.forEach((w) => w.setProperty(ui.prop.ANIM_STATUS, ui.anim_status.STOP)),
+      })
+    }
 
     // Uhrzeit oben links (24h), Ziffern 48x36 statt 40x30;
     // Sekunden klein (24x18) oben rechts neben den Minuten

@@ -158,6 +158,7 @@ def main():
         "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
         "<title>Watchface QR</title><body style='font-family:sans-serif;padding:16px'>"
         "<h1>Pokemon Battle – QR-Codes</h1>"
+        "<p><a href='app/'><b>&#10133; Neues Battle mit eigenen Monstern erstellen</b></a></p>"
         "<p>Zepp-App → Profil → Gerät → Entwicklermodus → Scannen. Jede Variante ist ein eigenes "
         "Watchface (Zahl = Größe in %), alle können gleichzeitig installiert sein.</p>" + "".join(sections)
     )

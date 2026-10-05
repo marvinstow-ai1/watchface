@@ -29,3 +29,15 @@ Das Skript schreibt `SCALE` und die Layout-Werte in den generierten Block von `w
 Die CI baut mit `tools/build_variants.sh` mehrere Größen als eigene Watchfaces (je eigene appId):
 - **Pokemon Kompakt 92/90/88**: aktuelles kompaktes Layout
 - **Pokemon Battle 86/84/82**: bisheriges Layout, unverändert aus Commit `e25d517` gebaut
+
+## Battles mit animierten Monstern
+Web-App: **https://marvinstow-ai1.github.io/watchface/app/**. Dort Name eingeben und je ein GIF/APNG für
+oben (Gegner, Frontansicht) und unten (eigenes Monster, Rückansicht) hochladen. Die App zeigt eine Vorschau
+und speichert beim Klick auf „Bauen“ alles in einem Commit unter `battles/<name>/`, mit den Sprites und
+`battle.json`. Die CI (`tools/build_battles.sh`) baut daraus je ein eigenes Watchface im Layout „Kompakt 92“:
+Lugia und Gengar fallen weg, die Sprites laufen mit allen Frames in Endlosschleife (fps aus den
+Frame-Dauern), pixelgenau eingepasst. Die appId ist fest aus dem Ordnernamen abgeleitet, ein erneutes
+Hochladen unter demselben Namen ersetzt also das Watchface.
+
+Die App braucht einen Fine-grained GitHub-Token nur für dieses Repo (Contents: Read and write,
+Actions: Read). Er wird nur im Browser gespeichert.
