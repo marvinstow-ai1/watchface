@@ -36,7 +36,8 @@ oben (Gegner, Frontansicht) und unten (eigenes Monster, Rückansicht) hochladen.
 und speichert beim Klick auf „Bauen“ alles in einem Commit unter `battles/<name>/`, mit den Sprites und
 `battle.json`. Die CI (`tools/build_battles.sh`) baut daraus je ein eigenes Watchface im Layout „Kompakt 92“:
 Lugia und Gengar fallen weg, die Sprites laufen mit allen Frames in Endlosschleife (fps aus den
-Frame-Dauern), pixelgenau eingepasst. Die appId ist fest aus dem Ordnernamen abgeleitet, ein erneutes
+Frame-Dauern). Sie bleiben in Originalgröße (1:1, optional ×2/×3 pixelgenau gezoomt); nur wenn sie
+größer als ihr Platz sind, werden sie passend verkleinert. Oben senkrecht zentriert, unten auf der Menübox. Die appId ist fest aus dem Ordnernamen abgeleitet, ein erneutes
 Hochladen unter demselben Namen ersetzt also das Watchface.
 
 Die App braucht einen Fine-grained GitHub-Token nur für dieses Repo (Contents: Read and write,

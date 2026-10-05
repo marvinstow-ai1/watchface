@@ -41,7 +41,11 @@
   .watch { position: relative; width: 390px; height: 450px; border-radius: 80px; overflow: hidden;
            background: #f8f8f8 center/100% 100% no-repeat; border: 10px solid #222; box-sizing: content-box;
            transform-origin: top center; }
-  .sprite { position: absolute; overflow: hidden; }
+  .sprite { position: absolute; overflow: visible; }
+  select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+           color: var(--text); font-size: 15px; }
+  .opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .opts label { margin: 0; }
   .sprite img { position: absolute; image-rendering: pixelated; image-rendering: crisp-edges; }
   ul.battles { list-style: none; padding: 0; margin: 0; }
   ul.battles li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -65,13 +69,16 @@
 
       <label for="top">Oben: Gegner (Frontansicht)</label>
       <input id="top" type="file" accept=".gif,.png,.apng,.webp,image/gif,image/png,image/apng,image/webp">
-      <label class="inline"><input id="flipTop" type="checkbox"> spiegeln</label>
+      <div class="opts"><label class="inline"><input id="flipTop" type="checkbox"> spiegeln</label>
+        <label class="inline">Größe <select id="zoomTop"><option value="1" selected>Original</option><option value="2">×2</option><option value="3">×3</option></select></label></div>
 
       <label for="bottom">Unten: eigenes Monster (Rückansicht)</label>
       <input id="bottom" type="file" accept=".gif,.png,.apng,.webp,image/gif,image/png,image/apng,image/webp">
-      <label class="inline"><input id="flipBottom" type="checkbox"> spiegeln</label>
+      <div class="opts"><label class="inline"><input id="flipBottom" type="checkbox"> spiegeln</label>
+        <label class="inline">Größe <select id="zoomBottom"><option value="1" selected>Original</option><option value="2">×2</option><option value="3">×3</option></select></label></div>
       <p class="hint">GIF oder animiertes PNG mit transparentem Hintergrund. Alle Frames werden übernommen
-        und laufen in Endlosschleife.</p>
+        und laufen in Endlosschleife. „Original“ zeigt das Sprite 1:1 (pixelscharf); ×2/×3 vergrößert
+        pixelgenau. Ist es größer als sein Platz, wird es automatisch passend verkleinert.</p>
 
       <div class="row">
         <button id="build" disabled>Bauen</button>
@@ -88,7 +95,8 @@
         </div>
       </div>
       <p class="hint">Uhrzeit, Datum usw. sind Beispielwerte. Position und Größe der Monster
-        berechnet die Uhr genauso; bei Sprites mit stark wechselnder Größe kann es um ein paar Pixel abweichen.</p>
+        berechnet die Uhr genauso. Die Vorschau misst nur das erste Frame; ändert sich die Größe in der
+        Animation stark, kann die Uhr um ein paar Pixel abweichen.</p>
     </section>
   </div>
 
@@ -175,24 +183,52 @@
   const files = { top: null, bottom: null };
   const info = { top: null, bottom: null };
 
-  // Sichtbaren Bereich (Alpha-Bounding-Box) des ersten Frames bestimmen
-  function measure(url) {
+  // Sichtbaren Bereich (Alpha-Bounding-Box) über alle Frames bestimmen (wie beim Bauen);
+  // Browser ohne ImageDecoder messen nur das erste Frame.
+  function alphaBox(ctx, w, h, box) {
+    const d = ctx.getImageData(0, 0, w, h).data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (d[(y * w + x) * 4 + 3] > 0) {
+        if (x < box[0]) box[0] = x; if (y < box[1]) box[1] = y;
+        if (x + 1 > box[2]) box[2] = x + 1; if (y + 1 > box[3]) box[3] = y + 1;
+      }
+    }
+  }
+  async function measureAllFrames(file) {
+    const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: file.type || 'image/png' });
+    await dec.tracks.ready;
+    const n = dec.tracks.selectedTrack.frameCount;
+    let c, ctx, w, h; const box = [Infinity, Infinity, -1, -1];
+    for (let i = 0; i < n; i++) {
+      const { image } = await dec.decode({ frameIndex: i });
+      if (!c) { w = image.displayWidth; h = image.displayHeight; c = document.createElement('canvas');
+        c.width = w; c.height = h; ctx = c.getContext('2d', { willReadFrequently: true }); }
+      ctx.clearRect(0, 0, w, h); ctx.drawImage(image, 0, 0); image.close();
+      alphaBox(ctx, w, h, box);
+    }
+    dec.close();
+    if (box[2] < 0) return { w, h, box: [0, 0, w, h] };
+    return { w, h, box };
+  }
+  function measureFirstFrame(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const w = img.naturalWidth, h = img.naturalHeight;
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
         const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
-        const d = ctx.getImageData(0, 0, c.width, c.height).data;
-        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
-        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
-          if (d[(y * c.width + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
-        }
-        if (x1 < 0) { x0 = 0; y0 = 0; x1 = c.width - 1; y1 = c.height - 1; }
-        resolve({ w: img.naturalWidth, h: img.naturalHeight, box: [x0, y0, x1 + 1, y1 + 1] });
+        const box = [Infinity, Infinity, -1, -1]; alphaBox(ctx, w, h, box);
+        resolve({ w, h, box: box[2] < 0 ? [0, 0, w, h] : box });
       };
       img.onerror = () => reject(new Error('Bild kann nicht gelesen werden.'));
       img.src = url;
     });
+  }
+  async function measure(file, url) {
+    if ('ImageDecoder' in window) {
+      try { return await measureAllFrames(file); } catch (e) { /* Fallback unten */ }
+    }
+    return measureFirstFrame(url);
   }
 
   async function onFile(key) {
@@ -200,7 +236,7 @@
     files[key] = f || null; info[key] = null;
     if (f) {
       const url = URL.createObjectURL(f);
-      info[key] = { url, ...(await measure(url)) };
+      info[key] = { url, ...(await measure(f, url)) };
     }
     refreshPreview(); updateButton();
   }
@@ -208,25 +244,26 @@
   $('bottom').onchange = () => onFile('bottom');
   $('flipTop').onchange = refreshPreview;
   $('flipBottom').onchange = refreshPreview;
+  $('zoomTop').onchange = refreshPreview;
+  $('zoomBottom').onchange = refreshPreview;
 
-  // gleiche Logik wie tools/inset_layout.py: ganzzahlig vergrößern, unten bündig, waagerecht zentriert
+  // gleiche Logik wie tools/inset_layout.py: Originalgröße (mal Zoom), nur bei Übergröße verkleinern;
+  // waagerecht zentriert, oben senkrecht zentriert, unten auf der Menübox stehend
   function place(key) {
     const el = $(key === 'top' ? 'spriteTop' : 'spriteBottom');
     const img = el.querySelector('img');
     const i = info[key];
     if (!i || !layout) { el.style.display = 'none'; return; }
     const [sx0, sy0, sx1, sy1] = layout.slots[key];
-    const S = layout.scale;
     const [bx0, by0, bx1, by1] = i.box;
     const w = bx1 - bx0, h = by1 - by0;
-    let f = Math.min((sx1 - sx0) / S / w, (sy1 - sy0) / S / h);
-    if (f >= 1) f = Math.floor(f);
-    const k = f * S; // Bildschirm-Pixel pro Sprite-Pixel
+    const zoom = +$(key === 'top' ? 'zoomTop' : 'zoomBottom').value;
+    const k = zoom * Math.min(1, (sx1 - sx0) / (w * zoom), (sy1 - sy0) / (h * zoom)); // Bildschirm-Pixel pro Sprite-Pixel
     const dw = w * k, dh = h * k;
     const flip = $(key === 'top' ? 'flipTop' : 'flipBottom').checked;
     el.style.display = 'block';
     el.style.left = `${sx0 + (sx1 - sx0 - dw) / 2}px`;
-    el.style.top = `${sy1 - dh}px`;
+    el.style.top = `${key === 'top' ? sy0 + (sy1 - sy0 - dh) / 2 : sy1 - dh}px`;
     el.style.width = `${dw}px`; el.style.height = `${dh}px`;
     img.src = i.url;
     img.style.width = `${i.w * k}px`; img.style.height = `${i.h * k}px`;
@@ -314,7 +351,8 @@
       setStatus(el, 'Lade Dateien hoch …');
       const topName = `top.${ext(files.top)}`, bottomName = `bottom.${ext(files.bottom)}`;
       const cfg = { name, top: topName, bottom: bottomName,
-        flip_top: $('flipTop').checked, flip_bottom: $('flipBottom').checked, created: new Date().toISOString() };
+        flip_top: $('flipTop').checked, flip_bottom: $('flipBottom').checked,
+        zoom_top: +$('zoomTop').value, zoom_bottom: +$('zoomBottom').value, created: new Date().toISOString() };
       const sha = await commitFiles([
         { path: `battles/${slug}/${topName}`, content: await toBase64(files.top) },
         { path: `battles/${slug}/${bottomName}`, content: await toBase64(files.bottom) },

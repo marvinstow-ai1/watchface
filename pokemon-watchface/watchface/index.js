@@ -37,7 +37,7 @@ WatchFace({
       const a = ANIM && ANIM[key]
       if (!a) continue
       anims.push(ui.createWidget(ui.widget.IMG_ANIM, {
-        x: X(a.x), y: Y(a.y), anim_path: 'anim', anim_prefix: key, anim_ext: 'png',
+        x: a.x, y: a.y, anim_path: 'anim', // Bildschirm-Pixel anim_prefix: key, anim_ext: 'png',
         anim_fps: a.fps, anim_size: a.frames, repeat_count: 0, // 0 = Endlosschleife
         anim_status: ui.anim_status.START, show_level: N,
       }))

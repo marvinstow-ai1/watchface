@@ -24,7 +24,6 @@ Nutzung: python3 tools/inset_layout.py [--scale 0.9] [--project pokemon-watchfac
 """
 import argparse
 import json
-import math
 import re
 import shutil
 from pathlib import Path
@@ -49,8 +48,10 @@ PIECES = [  # (Ausschnitt im Original, Verschiebung)
 ]
 GENGAR_AREA = (40, 226, 172, 339)  # im Original; wird im Battle-Modus geleert
 
-# Plätze für die Monster im kompakten Design (x0, y0, x1, y1). Sprites werden ganzzahlig
-# (pixelgenau) so groß wie möglich eingepasst, unten bündig und waagerecht zentriert.
+# Plätze für die Monster im kompakten Design (x0, y0, x1, y1). Sprites bleiben in Originalgröße
+# (1:1 Bildschirmpixel, optional ganzzahlig gezoomt); nur wenn sie größer als der Platz sind, werden
+# sie auf die größte passende Größe verkleinert. Waagerecht zentriert; oben (Gegner) senkrecht
+# zentriert, unten (eigenes Monster) steht es auf der Menübox.
 SLOTS = {
     "top": (224, 22, 382, 164),  # Gegner (Frontansicht), wo Lugia war
     "bottom": (40, 88, 172, 262),  # eigenes Monster (Rückansicht), wo Gengar war
@@ -177,19 +178,29 @@ def load_sprite(path, flip=False):
     return frames, max(1, min(MAX_FPS, fps))
 
 
-def fit_to_slot(frames, slot):
-    """Sprite in den Platz einpassen (ganzzahlig vergrößert, sonst verkleinert);
-    liefert Frames und Position in Design-Koordinaten."""
-    x0, y0, x1, y1 = slot
+def slot_on_screen(key):
+    """Platz in Bildschirm-Pixeln (das Design ist um SCALE verkleinert und zentriert)."""
+    ox = (SCREEN[0] - round(SCREEN[0] * SCALE)) // 2
+    oy = (SCREEN[1] - round(DESIGN_H * SCALE)) // 2
+    x0, y0, x1, y1 = SLOTS[key]
+    return ox + round(x0 * SCALE), oy + round(y0 * SCALE), ox + round(x1 * SCALE), oy + round(y1 * SCALE)
+
+
+def fit_to_slot(frames, key, zoom=1):
+    """Sprite in Originalgröße (mal zoom, pixelgenau) in den Platz setzen; nur wenn es zu groß
+    ist, auf die größte passende Größe verkleinern. Liefert Frames und Bildschirm-Position."""
+    x0, y0, x1, y1 = slot_on_screen(key)
+    if zoom > 1:
+        frames = [fr.resize((fr.width * zoom, fr.height * zoom), Image.NEAREST) for fr in frames]
     w, h = frames[0].size
-    f = min((x1 - x0) / w, (y1 - y0) / h)
-    if f >= 1:
-        f = math.floor(f)
-        frames = [fr.resize((w * f, h * f), Image.NEAREST) for fr in frames]
-    else:
-        frames = [fr.resize((round(w * f), round(h * f)), Image.LANCZOS) for fr in frames]
-    w, h = frames[0].size
-    return frames, (x0 + (x1 - x0 - w) // 2, y1 - h)
+    f = min(1, (x1 - x0) / w, (y1 - y0) / h)
+    if f < 1:
+        size = (max(1, round(w * f)), max(1, round(h * f)))
+        frames = [fr.resize(size, Image.LANCZOS) for fr in frames]
+        w, h = size
+    x = x0 + (x1 - x0 - w) // 2
+    y = y0 + (y1 - y0 - h) // 2 if key == "top" else y1 - h
+    return frames, (x, y)
 
 
 def build_anims(battle_dir, dst):
@@ -198,12 +209,13 @@ def build_anims(battle_dir, dst):
     (dst / "anim").mkdir(exist_ok=True)
     for key in ("top", "bottom"):
         frames, fps = load_sprite(battle_dir / cfg[key], cfg.get(f"flip_{key}", False))
-        frames, (x, y) = fit_to_slot(frames, SLOTS[key])
+        zoom = max(1, min(4, int(cfg.get(f"zoom_{key}", 1))))
+        frames, (x, y) = fit_to_slot(frames, key, zoom)
         for i, fr in enumerate(frames):
-            scaled(fr).save(dst / "anim" / f"{key}_{i}.png")
-        anims[key] = {"x": x, "y": y, "fps": fps, "frames": len(frames)}
-        print(f"{cfg['name']} {key}: {cfg[key]} -> {len(frames)} Frames, {fps} fps, "
-              f"{frames[0].width}x{frames[0].height} bei ({x},{y})")
+            fr.save(dst / "anim" / f"{key}_{i}.png")
+        anims[key] = {"x": x, "y": y, "fps": fps, "frames": len(frames)}  # Bildschirm-Pixel
+        print(f"{cfg['name']} {key}: {cfg[key]} (Zoom {zoom}) -> {len(frames)} Frames, {fps} fps, "
+              f"{frames[0].width}x{frames[0].height} px bei ({x},{y})")
     return cfg, anims
 
 

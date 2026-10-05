@@ -3,5 +3,7 @@
   "top": "top.png",
   "bottom": "bottom.png",
   "flip_top": false,
-  "flip_bottom": false
+  "flip_bottom": false,
+  "zoom_top": 2,
+  "zoom_bottom": 1
 }
