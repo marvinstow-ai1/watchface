@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # für die bisherigen Varianten aus einem älteren Commit
 
       - uses: actions/setup-node@v4
         with:
@@ -34,11 +36,22 @@ jobs:
           pip install qrcode pillow
           zeus --version
 
-      # Varianten in verschiedenen Größen (SCALE in %), jede als eigenes Watchface
-      - name: zeus build (Varianten)
+      # Kompaktes Layout in verschiedenen Größen (SCALE in %), jede als eigenes Watchface
+      - name: zeus build (Kompakt)
         env:
           CI: "true"
-        run: tools/build_variants.sh zabs 86 84 82
+          NAME_PREFIX: Pokemon Kompakt
+          APPID_OFFSET: "3"
+        run: tools/build_variants.sh zabs 92 90 88
+
+      # Bisherige Varianten (Pokemon Battle 86/84/82) bleiben auf der Seite:
+      # unverändert aus dem Stand von Commit e25d517 gebaut
+      - name: zeus build (bisherige Varianten)
+        env:
+          CI: "true"
+        run: |
+          git worktree add build/classic e25d517
+          build/classic/tools/build_variants.sh "$PWD/zabs" 86 84 82
 
       # Projekt-Pages-URL: https://<owner>.github.io/<repo>
       - name: Make install files + QR codes
@@ -48,7 +61,9 @@ jobs:
           BASE_URL="https://${OWNER}.github.io/${REPO}"
           # Zeus-Geräteliste, damit die Seite Gerätenamen statt IDs zeigt
           curl -fsSL https://upload-cdn.zepp.com/zeppos/devkit/zeus/v1/devices.json -o devices.json || echo "{}" > devices.json
-          python3 tools/make_install.py "$BASE_URL" site devices.json zabs/pokemon-battle-86.zab zabs/pokemon-battle-84.zab zabs/pokemon-battle-82.zab
+          python3 tools/make_install.py "$BASE_URL" site devices.json \
+            zabs/pokemon-kompakt-92.zab zabs/pokemon-kompakt-90.zab zabs/pokemon-kompakt-88.zab \
+            zabs/pokemon-battle-86.zab zabs/pokemon-battle-84.zab zabs/pokemon-battle-82.zab
           cp zabs/*.zab site/
           ls -la site
 

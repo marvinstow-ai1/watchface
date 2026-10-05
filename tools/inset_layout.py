@@ -2,16 +2,19 @@
 """
 Baut die Watchface-Assets aus dem Original-Design (design/original-assets/, 390x450):
 
-- Uhrzeit-Ziffern pixelgenau um TIME_ZOOM vergrößert
+- Kompaktes Layout: Der Hintergrund wird aus seinen Bausteinen (Gegner-HP-Box, Lugia,
+  unterer Teil mit Gengar/HP-Box/Menü) neu zusammengesetzt, mit weniger Leerraum in der
+  Mitte und einer Uhrzeit-Zeile über die ganze Breite oben (Lugia rutscht darunter).
+- Uhrzeit-Ziffern pixelgenau vergrößert (TIME_ZOOM), Sekunden klein im selben Stil (SEC_ZOOM)
 - Wochentage neu in fetter Pixelschrift (Stil der Uhrzeit, nur kleiner)
+- Schritt-/Akku-Symbole auf Ziffern-Zellgröße, kleine Ziffern 1px enger
 - alles gleichmäßig um SCALE verkleinert und mittig gesetzt, damit an den abgerundeten
   Ecken der Active 2 Square nichts abgeschnitten wird
 
-- Schritt-/Akku-Symbole auf Ziffern-Zellgröße, kleine Ziffern 1px enger
+Ergebnis: <projekt>/assets/default.s/; SCALE und die Layout-Werte werden in den
+generierten Block von <projekt>/watchface/index.js eingetragen.
 
-Ergebnis: <projekt>/assets/default.s/; SCALE wird in <projekt>/watchface/index.js eingetragen.
-
-Nutzung: python3 tools/inset_layout.py [--scale 0.86] [--project pokemon-watchface]
+Nutzung: python3 tools/inset_layout.py [--scale 0.9] [--project pokemon-watchface]
 """
 import argparse
 import re
@@ -20,8 +23,20 @@ from pathlib import Path
 
 from PIL import Image
 
-SCALE = 0.86  # Standard; per --scale überschreibbar
-TIME_ZOOM = 6 / 5  # Uhrzeit-Pixel 5px -> 6px
+SCALE = 0.9  # Standard; per --scale überschreibbar
+TIME_ZOOM = 7 / 5  # Uhrzeit-Pixel 5px -> 7px (Ziffern 56x42)
+SEC_ZOOM = 3 / 5  # Sekunden-Pixel 5px -> 3px (Ziffern 24x18)
+
+# Kompaktes Layout (Koordinaten im Original-Design). Die Uhrzeit-Zeile ist 42px hoch.
+DESIGN_H = 392  # Höhe des neu zusammengesetzten Designs (statt 450)
+BOX_DY = 10  # Gegner-HP-Box rutscht unter die größere Uhrzeit
+LUGIA_DY = 46  # Lugia rutscht unter die Uhrzeit-Zeile
+BOTTOM_FROM, BOTTOM_DY = 226, -58  # alles ab y=226 (Gengar, HP-Box, Menü) rückt nach oben
+PIECES = [  # (Ausschnitt im Original, Verschiebung)
+    ((0, BOTTOM_FROM, 390, 450), BOTTOM_DY),
+    ((15, 33, 219, 81), BOX_DY),  # Gegner-HP-Box
+    ((229, 0, 375, 142), LUGIA_DY),  # Lugia
+]
 SCREEN = (390, 450)
 FILL = (248, 248, 248)  # Hintergrundfarbe des Designs
 INK = (16, 16, 24, 255)  # Schriftfarbe des Designs
@@ -93,6 +108,37 @@ def fit_icon(im):
     return cell
 
 
+def compose_bg(src):
+    """Original-Hintergrund in Bausteine zerlegen und kompakt neu zusammensetzen."""
+    design = Image.new("RGB", (SCREEN[0], DESIGN_H), FILL)
+    for (x0, y0, x1, y1), dy in PIECES:
+        piece = src.crop((x0, y0, x1, y1))
+        # nur Nicht-Hintergrund-Pixel übernehmen, damit sich Bausteine nicht überdecken
+        mask = Image.new("L", piece.size, 0)
+        px, mp = piece.load(), mask.load()
+        for y in range(piece.height):
+            for x in range(piece.width):
+                if sum(abs(a - b) for a, b in zip(px[x, y], FILL)) > 12:
+                    mp[x, y] = 255
+        design.paste(piece, (x0, y0 + dy), mask)
+    return design
+
+
+def write_layout_block(index_js):
+    js = index_js.read_text()
+    block = (
+        "// <generated: tools/inset_layout.py>\n"
+        f"const SCALE = {SCALE}\n"
+        f"const DESIGN_H = {DESIGN_H}\n"
+        f"const BOTTOM_DY = {BOTTOM_DY}\n"
+        "// </generated>"
+    )
+    js, n = re.subn(r"// <generated: tools/inset_layout.py>.*?// </generated>", block, js, flags=re.S)
+    if n != 1:
+        raise SystemExit(f"generierter Layout-Block nicht in {index_js} gefunden")
+    index_js.write_text(js)
+
+
 def main():
     global SCALE
     ap = argparse.ArgumentParser()
@@ -115,7 +161,7 @@ def main():
         if rel == "icon.png":
             shutil.copy(src, out)  # Vorschaubild in der Zepp-App, bleibt wie es ist
         elif rel == "bg.png":
-            small = scaled(im.convert("RGB"))
+            small = scaled(compose_bg(im.convert("RGB")))
             bg = Image.new("RGB", SCREEN, FILL)
             bg.paste(small, ((SCREEN[0] - small.width) // 2, (SCREEN[1] - small.height) // 2))
             bg.save(out)
@@ -124,6 +170,10 @@ def main():
         else:
             im = im.convert("RGBA")
             if rel.startswith("time/"):
+                if rel != "time/colon.png":  # Sekunden: gleiche Schrift, klein
+                    sec = im.resize((round(im.width * SEC_ZOOM), round(im.height * SEC_ZOOM)), Image.NEAREST)
+                    (DST / "sec").mkdir(exist_ok=True)
+                    scaled(sec).save(DST / "sec" / Path(rel).name)
                 im = im.resize((round(im.width * TIME_ZOOM), round(im.height * TIME_ZOOM)), Image.NEAREST)
             elif rel == "shoe.png" or rel.startswith("batt/"):
                 im = fit_icon(im)
@@ -135,14 +185,9 @@ def main():
     for i, day in enumerate(WEEKDAYS, start=1):
         scaled(render_word(day)).save(DST / "week" / f"{i}.png")
 
-    index_js = args.project / "watchface" / "index.js"
-    js = index_js.read_text()
-    js, n = re.subn(r"^const SCALE = [0-9.]+$", f"const SCALE = {SCALE}", js, flags=re.M)
-    if n != 1:
-        raise SystemExit(f"'const SCALE = ...' nicht in {index_js} gefunden")
-    index_js.write_text(js)
+    write_layout_block(args.project / "watchface" / "index.js")
 
-    w, h = round(SCREEN[0] * SCALE), round(SCREEN[1] * SCALE)
+    w, h = round(SCREEN[0] * SCALE), round(DESIGN_H * SCALE)
     print(f"SCALE={SCALE}: Design {w}x{h}, Rand links/rechts {(SCREEN[0] - w) // 2}px, "
           f"oben/unten {(SCREEN[1] - h) // 2}px")
 
