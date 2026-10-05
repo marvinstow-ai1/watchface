@@ -18,8 +18,8 @@ Jeder Push auf `main` baut neu und aktualisiert die Seite.
 Die Originalgrafiken liegen in `design/original-assets/`. `tools/inset_layout.py --scale 0.9` baut daraus
 die Assets in `pokemon-watchface/assets/default.s/`:
 - kompaktes Layout: Hintergrund aus seinen Bausteinen neu zusammengesetzt (weniger Leerraum in der Mitte,
-  Uhrzeit-Zeile über die volle Breite, Lugia darunter)
-- große Uhrzeit (56x42) mit kleinen Sekunden (24x18) im selben Pixelstil
+  Lugia rechts neben Uhrzeit und Gegner-HP-Box)
+- Uhrzeit (48x36) mit kleinen Sekunden (24x18) im selben Pixelstil, Platzierung nach Referenzbild
 - Wochentage in fetter Pixelschrift, rechtsbündig mit dem Ende der HP-Leiste
 - Schritt-/Akku-Symbole auf Ziffernhöhe
 - alles um `SCALE` verkleinert und mittig gesetzt, damit die runden Display-Ecken nichts abschneiden

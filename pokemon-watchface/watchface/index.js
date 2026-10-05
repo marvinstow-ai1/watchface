@@ -8,8 +8,8 @@ const N = ui.show_level.ONLY_NORMAL
 // Der Block wird von tools/inset_layout.py gesetzt (die Assets sind dort bereits verkleinert).
 // <generated: tools/inset_layout.py>
 const SCALE = 0.9
-const DESIGN_H = 392
-const BOTTOM_DY = -58
+const DESIGN_H = 378
+const BOTTOM_DY = -72
 // </generated>
 const OX = Math.floor((390 - Math.round(390 * SCALE)) / 2)
 const OY = Math.floor((450 - Math.round(DESIGN_H * SCALE)) / 2)
@@ -29,9 +29,9 @@ WatchFace({
   build() {
     ui.createWidget(ui.widget.IMG, { x: 0, y: 0, src: 'bg.png', show_level: N })
 
-    // Uhrzeit oben über die ganze Zeile (24h), Ziffern 56x42 statt 40x30;
+    // Uhrzeit oben links (24h), Ziffern 48x36 statt 40x30;
     // Sekunden klein (24x18) oben rechts neben den Minuten
-    const HH_MM_W = 4 * L(56) + L(21) // tatsächliche Breite der verkleinerten Bilder
+    const HH_MM_W = 4 * L(48) + L(18) // tatsächliche Breite der verkleinerten Bilder
     ui.createWidget(ui.widget.IMG_TIME, {
       hour_zero: 1, hour_startX: X(20), hour_startY: Y(0), hour_array: TIME, hour_space: 0,
       hour_unit_en: 'time/colon.png', hour_unit_sc: 'time/colon.png', hour_unit_tc: 'time/colon.png',

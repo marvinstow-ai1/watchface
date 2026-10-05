@@ -24,14 +24,16 @@ from pathlib import Path
 from PIL import Image
 
 SCALE = 0.9  # Standard; per --scale überschreibbar
-TIME_ZOOM = 7 / 5  # Uhrzeit-Pixel 5px -> 7px (Ziffern 56x42)
+TIME_ZOOM = 6 / 5  # Uhrzeit-Pixel 5px -> 6px (Ziffern 48x36)
 SEC_ZOOM = 3 / 5  # Sekunden-Pixel 5px -> 3px (Ziffern 24x18)
 
-# Kompaktes Layout (Koordinaten im Original-Design). Die Uhrzeit-Zeile ist 42px hoch.
-DESIGN_H = 392  # Höhe des neu zusammengesetzten Designs (statt 450)
-BOX_DY = 10  # Gegner-HP-Box rutscht unter die größere Uhrzeit
-LUGIA_DY = 46  # Lugia rutscht unter die Uhrzeit-Zeile
-BOTTOM_FROM, BOTTOM_DY = 226, -58  # alles ab y=226 (Gengar, HP-Box, Menü) rückt nach oben
+# Kompaktes Layout (Koordinaten im Original-Design), Platzierung nach der Referenz des Users:
+# Uhrzeit (36px hoch) oben links, Gegner-HP-Box direkt darunter, Lugia rechts knapp unter
+# der Sekundenhöhe, darunter Wochentag/HP-Box/Menü ohne großen Leerraum.
+DESIGN_H = 378  # Höhe des neu zusammengesetzten Designs (statt 450)
+BOX_DY = 4  # Gegner-HP-Box rutscht unter die größere Uhrzeit
+LUGIA_DY = 23  # Lugia beginnt knapp unter den Sekunden
+BOTTOM_FROM, BOTTOM_DY = 226, -72  # alles ab y=226 (Gengar, HP-Box, Menü) rückt nach oben
 PIECES = [  # (Ausschnitt im Original, Verschiebung)
     ((0, BOTTOM_FROM, 390, 450), BOTTOM_DY),
     ((15, 33, 219, 81), BOX_DY),  # Gegner-HP-Box
