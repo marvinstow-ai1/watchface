@@ -194,8 +194,8 @@
       }
     }
   }
-  async function measureAllFrames(file) {
-    const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: file.type || 'image/png' });
+  async function measureAllFrames(buf, type) {
+    const dec = new ImageDecoder({ data: buf, type });
     await dec.tracks.ready;
     const n = dec.tracks.selectedTrack.frameCount;
     let c, ctx, w, h; const box = [Infinity, Infinity, -1, -1];
@@ -224,19 +224,34 @@
       img.src = url;
     });
   }
-  async function measure(file, url) {
+  async function measure(buf, type, url) {
     if ('ImageDecoder' in window) {
-      try { return await measureAllFrames(file); } catch (e) { /* Fallback unten */ }
+      try { return await measureAllFrames(buf, type); } catch (e) { /* Fallback unten */ }
     }
     return measureFirstFrame(url);
   }
 
+  // Datei sofort komplett einlesen: iOS gibt ausgewählte Dateien wieder frei, sobald man die
+  // Seite verlässt; später gelesen gäbe das "The object can not be found here".
+  function bufToBase64(buf) {
+    const bytes = new Uint8Array(buf); let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
   async function onFile(key) {
     const f = $(key).files[0];
-    files[key] = f || null; info[key] = null;
+    files[key] = null; info[key] = null;
     if (f) {
-      const url = URL.createObjectURL(f);
-      info[key] = { url, ...(await measure(f, url)) };
+      try {
+        const buf = await f.arrayBuffer();
+        const type = f.type || 'image/png';
+        const url = URL.createObjectURL(new Blob([buf], { type }));
+        files[key] = { name: f.name, base64: bufToBase64(buf) };
+        info[key] = { url, ...(await measure(buf, type, url)) };
+      } catch (e) {
+        setStatus($('buildStatus'), `Datei konnte nicht gelesen werden (${e.message}). Bitte neu auswählen.`, 'err');
+      }
     }
     refreshPreview(); updateButton();
   }
@@ -283,14 +298,6 @@
   }
   $('name').oninput = updateButton;
 
-  function toBase64(file) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result).split(',')[1]);
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(file);
-    });
-  }
   const b64utf8 = (s) => btoa(unescape(encodeURIComponent(s)));
   const ext = (f) => (f.name.match(/\.(gif|png|apng|webp)$/i) || ['', 'png'])[1].toLowerCase();
 
@@ -354,8 +361,8 @@
         flip_top: $('flipTop').checked, flip_bottom: $('flipBottom').checked,
         zoom_top: +$('zoomTop').value, zoom_bottom: +$('zoomBottom').value, created: new Date().toISOString() };
       const sha = await commitFiles([
-        { path: `battles/${slug}/${topName}`, content: await toBase64(files.top) },
-        { path: `battles/${slug}/${bottomName}`, content: await toBase64(files.bottom) },
+        { path: `battles/${slug}/${topName}`, content: files.top.base64 },
+        { path: `battles/${slug}/${bottomName}`, content: files.bottom.base64 },
         { path: `battles/${slug}/battle.json`, content: b64utf8(JSON.stringify(cfg, null, 2) + '\n') },
       ], `Battle: ${name}`);
       setStatus(el, 'Gespeichert, Build startet …');

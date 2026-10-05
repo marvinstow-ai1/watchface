@@ -1,4 +1,5 @@
 import ui from '@zos/ui'
+import * as zui from '@zos/ui' // Namespace-Import wie in Zepps Vorlagen (für die Animation)
 
 const N = ui.show_level.ONLY_NORMAL
 
@@ -31,23 +32,42 @@ WatchFace({
   build() {
     ui.createWidget(ui.widget.IMG, { x: 0, y: 0, src: 'bg.png', show_level: N })
 
-    // Animierte Monster (Battle-Watchfaces): Endlosschleife, nur bei aktivem Display
-    const anims = []
-    for (const key of ['top', 'bottom']) {
-      const a = ANIM && ANIM[key]
-      if (!a) continue
-      anims.push(ui.createWidget(ui.widget.IMG_ANIM, {
-        x: a.x, y: a.y, anim_path: 'anim', // Bildschirm-Pixel anim_prefix: key, anim_ext: 'png',
-        anim_fps: a.fps, anim_size: a.frames, repeat_count: 0, // 0 = Endlosschleife
-        anim_status: ui.anim_status.START, show_level: N,
-      }))
-    }
-    if (anims.length && ui.widget.WIDGET_DELEGATE) {
-      // nach dem Aufwecken des Displays wieder starten
-      ui.createWidget(ui.widget.WIDGET_DELEGATE, {
-        resume_call: () => anims.forEach((w) => w.setProperty(ui.prop.ANIM_STATUS, ui.anim_status.START)),
-        pause_call: () => anims.forEach((w) => w.setProperty(ui.prop.ANIM_STATUS, ui.anim_status.STOP)),
-      })
+    // Animierte Monster (Battle-Watchfaces): Endlosschleife, nur bei aktivem Display.
+    // Abgesichert: scheitert etwas, läuft das restliche Zifferblatt weiter und der Fehler
+    // steht klein unten auf dem Display (zur Diagnose).
+    if (ANIM) {
+      try {
+        const AS = zui.anim_status || ui.anim_status || {}
+        const START = AS.START !== undefined ? AS.START : 1
+        const STOP = AS.STOP !== undefined ? AS.STOP : 3
+        const PROP = zui.prop || ui.prop || {}
+        const ANIM_PROP = PROP.ANIM_STATUS
+        const W = zui.widget || ui.widget
+        const anims = []
+        for (const key of ['top', 'bottom']) {
+          const a = ANIM[key]
+          if (!a) continue
+          const w = (zui.createWidget || ui.createWidget)(W.IMG_ANIM, {
+            x: a.x, y: a.y, anim_path: 'anim', anim_prefix: key, anim_ext: 'png', // Bildschirm-Pixel
+            anim_fps: a.fps, anim_size: a.frames, repeat_count: 0, // 0 = Endlosschleife
+            anim_status: STOP, show_level: N,
+          })
+          if (ANIM_PROP !== undefined) w.setProperty(ANIM_PROP, START)
+          anims.push(w)
+        }
+        if (anims.length && ANIM_PROP !== undefined && W.WIDGET_DELEGATE) {
+          // nach dem Aufwecken des Displays wieder starten
+          ui.createWidget(W.WIDGET_DELEGATE, {
+            resume_call: () => anims.forEach((w) => w.setProperty(ANIM_PROP, START)),
+            pause_call: () => anims.forEach((w) => w.setProperty(ANIM_PROP, STOP)),
+          })
+        }
+      } catch (e) {
+        ui.createWidget(ui.widget.TEXT, {
+          x: 10, y: 425, w: 370, h: 24, color: 0xcc0000, text_size: 16,
+          text: 'ANIM: ' + (e && e.message ? e.message : String(e)), show_level: N,
+        })
+      }
     }
 
     // Uhrzeit oben links (24h), Ziffern 48x36 statt 40x30;
